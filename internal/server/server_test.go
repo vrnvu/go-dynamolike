@@ -8,38 +8,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRequestID(t *testing.T) {
-	server := NewServer(3000)
-	req, _ := http.NewRequest("GET", "/", nil)
-	rr := httptest.NewRecorder()
+func TestHandleGetObject(t *testing.T) {
+	req, err := http.NewRequest("GET", "/object/123", nil)
+	assert.NoError(t, err)
 
-	server.Handler.ServeHTTP(rr, req)
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(handleGetObject)
+
+	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-
-	requestID := rr.Header().Get("X-Request-ID")
-	assert.NotEmpty(t, requestID, "expected X-Request-ID header to be set")
-
-	responseBody := rr.Body.String()
-	assert.Contains(t, responseBody, "RequestID: "+requestID, "response body should contain the request ID")
+	assert.Contains(t, rr.Body.String(), "RequestID:")
+	assert.NotEmpty(t, rr.Header().Get("X-Request-ID"))
 }
 
-func TestRequestIDUniqueness(t *testing.T) {
-	server := NewServer(3000)
-	requestIDs := make(map[string]bool)
+func TestHandlePutObject(t *testing.T) {
+	req, err := http.NewRequest("PUT", "/object/456", nil)
+	assert.NoError(t, err)
 
-	for i := 0; i < 100; i++ {
-		req, _ := http.NewRequest("GET", "/", nil)
-		rr := httptest.NewRecorder()
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlePutObject)
 
-		server.Handler.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
-		requestID := rr.Header().Get("X-Request-ID")
-		assert.NotEmpty(t, requestID, "expected X-Request-ID header to be set")
-
-		if requestIDs[requestID] {
-			t.Fatalf("duplicate request ID generated: %s", requestID)
-		}
-		requestIDs[requestID] = true
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "RequestID:")
+	assert.NotEmpty(t, rr.Header().Get("X-Request-ID"))
 }

@@ -7,11 +7,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	getObjectPath = "/object/:id"
+	putObjectPath = "/object/:id"
+)
+
 func generateRequestID() string {
 	return uuid.New().String()
 }
 
-func handleRoot(w http.ResponseWriter, r *http.Request) {
+func handleGetObject(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+	w.Header().Set("X-Request-ID", requestID)
+	w.Write([]byte(fmt.Sprintf("RequestID: %s", requestID)))
+}
+
+func handlePutObject(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
 	w.Header().Set("X-Request-ID", requestID)
 	w.Write([]byte(fmt.Sprintf("RequestID: %s", requestID)))
@@ -19,7 +30,8 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 func newHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleRoot)
+	mux.HandleFunc(getObjectPath, handleGetObject)
+	mux.HandleFunc(putObjectPath, handlePutObject)
 	return mux
 }
 
