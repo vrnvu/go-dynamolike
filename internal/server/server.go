@@ -30,8 +30,16 @@ func handlePutObject(w http.ResponseWriter, r *http.Request) {
 
 func newHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(getObjectPath, handleGetObject)
-	mux.HandleFunc(putObjectPath, handlePutObject)
+	mux.HandleFunc(getObjectPath, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetObject(w, r)
+		case http.MethodPut:
+			handlePutObject(w, r)
+		default:
+			panic(fmt.Sprintf("Unsupported HTTP method: %s", r.Method))
+		}
+	})
 	return mux
 }
 

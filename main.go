@@ -2,40 +2,64 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/vrnvu/go-dynamolike/internal/discovery"
 	"github.com/vrnvu/go-dynamolike/internal/server"
 )
 
+func init() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+}
+
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		slog.Info("Starting Minio discovery")
+		if err := discovery.DiscoverMinioInstances(ctx); err != nil {
+			slog.Error("Error in Minio discovery", "error", err)
+			cancel()
+		}
+	}()
+
+	// Start the server
 	port := 3000
 	server := server.NewServer(port)
 
-	log.Printf("Server is running at port %d", port)
+	slog.Info("Server is running", "port", port)
 	go func() {
 		err := server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			slog.Error("Server error", "error", err)
+			cancel()
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	<-quit
+	select {
+	case <-quit:
+		slog.Info("Shutting down...")
+	case <-ctx.Done():
+		slog.Info("Shutting down due to error...")
+	}
 
-	log.Println("Shutting down...")
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 
-	ctx, shutdown := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdown()
-
-	err := server.Shutdown(ctx)
+	err := server.Shutdown(shutdownCtx)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error during shutdown", "error", err)
 	}
 }
