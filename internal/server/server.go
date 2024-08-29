@@ -5,12 +5,10 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/vrnvu/go-dynamolike/internal/discovery"
 )
 
 type Server struct {
-	Server   *http.Server
-	registry *discovery.ServiceRegistry
+	Server *http.Server
 }
 
 const (
@@ -58,7 +56,6 @@ func NewServer(port int) *Server {
 		Handler: s.newHandler(),
 	}
 
-	s.registry = discovery.NewServiceRegistry()
 	s.Server = httpServer
 	return s
 }

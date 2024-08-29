@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/docker/client"
 	"github.com/vrnvu/go-dynamolike/internal/discovery"
 	"github.com/vrnvu/go-dynamolike/internal/server"
 )
@@ -24,9 +25,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		slog.Error("Error creating Docker client", "error", err)
+		cancel()
+		return
+	}
+	defer cli.Close()
+
+	registry := discovery.NewServiceRegistry(ctx, cli)
+
 	go func() {
-		slog.Info("Starting Minio discovery")
-		if err := discovery.DiscoverMinioInstances(ctx); err != nil {
+		if err := registry.DiscoverMinioInstances(ctx, cli); err != nil {
 			slog.Error("Error in Minio discovery", "error", err)
 			cancel()
 		}
@@ -58,7 +68,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	err := server.Server.Shutdown(shutdownCtx)
+	err = server.Server.Shutdown(shutdownCtx)
 	if err != nil {
 		slog.Error("Error during shutdown", "error", err)
 	}

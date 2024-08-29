@@ -27,21 +27,25 @@ type MinioInstance struct {
 }
 
 type ServiceRegistry struct {
+	ctx       context.Context
+	cli       *client.Client
 	instances map[string]MinioInstance
 }
 
-func NewServiceRegistry() *ServiceRegistry {
+func NewServiceRegistry(ctx context.Context, cli *client.Client) *ServiceRegistry {
 	return &ServiceRegistry{
+		ctx:       ctx,
+		cli:       cli,
 		instances: make(map[string]MinioInstance),
 	}
 }
 
-func (sr *ServiceRegistry) AddInstance(instance MinioInstance) {
-	sr.instances[instance.ID] = instance
+func (sr *ServiceRegistry) AddInstance(containerID string, instance MinioInstance) {
+	sr.instances[containerID] = instance
 }
 
-func (sr *ServiceRegistry) RemoveInstance(instanceID string) {
-	delete(sr.instances, instanceID)
+func (sr *ServiceRegistry) RemoveInstance(containerID string) {
+	delete(sr.instances, containerID)
 }
 
 func (sr *ServiceRegistry) GetInstances() []MinioInstance {
@@ -52,9 +56,9 @@ func (sr *ServiceRegistry) GetInstances() []MinioInstance {
 	return instances
 }
 
-func PollNetwork(ctx context.Context, cli *client.Client, registry *ServiceRegistry) error {
+func (sr *ServiceRegistry) PollNetwork() error {
 	slog.Info("Initializing registry")
-	containers, err := cli.ContainerList(ctx, container.ListOptions{
+	containers, err := sr.cli.ContainerList(sr.ctx, container.ListOptions{
 		Filters: filters.NewArgs(
 			filters.Arg("name", CONTAINER_NAME),
 			filters.Arg("ancestor", CONTAINER_IMAGE),
@@ -69,21 +73,21 @@ func PollNetwork(ctx context.Context, cli *client.Client, registry *ServiceRegis
 	slog.Info("Found containers", "count", len(containers))
 
 	for _, container := range containers {
-		instance, err := getMinioInstance(ctx, cli, container.ID)
+		instance, err := sr.getMinioInstance(container.ID)
 		if err != nil {
 			slog.Error("Error getting Minio instance", "containerID", container.ID, "error", err)
 			continue
 		}
-		registry.AddInstance(instance)
+		sr.AddInstance(container.ID, instance)
 		slog.Info("Initialized Minio instance", "instance", instance)
 	}
 
-	slog.Info("Initial Minio instances", "instances", registry.GetInstances())
+	slog.Info("Initial Minio instances", "instances", sr.GetInstances())
 	return nil
 }
 
-func getMinioInstance(ctx context.Context, cli *client.Client, containerID string) (MinioInstance, error) {
-	container, err := cli.ContainerInspect(ctx, containerID)
+func (sr *ServiceRegistry) getMinioInstance(containerID string) (MinioInstance, error) {
+	container, err := sr.cli.ContainerInspect(sr.ctx, containerID)
 	if err != nil {
 		return MinioInstance{}, fmt.Errorf("error inspecting container %s: %v", containerID, err)
 	}
@@ -109,48 +113,30 @@ func getMinioInstance(ctx context.Context, cli *client.Client, containerID strin
 	}, nil
 }
 
-func handleContainerEvent(ctx context.Context, cli *client.Client, registry *ServiceRegistry, event events.Message) error {
-	// TODO we probably want to change the mapping from ContainerID to MinioInstanceID
-	// since the container can be restarted with the same ID
-	instance, err := getMinioInstance(ctx, cli, event.Actor.ID)
-	if err != nil {
-		return fmt.Errorf("error getting Minio instance for container %s: %v", event.Actor.ID, err)
-	}
-
+func (sr *ServiceRegistry) handleContainerEvent(event events.Message) error {
 	switch event.Action {
-	case events.ActionDie:
-		registry.RemoveInstance(instance.ID)
-		slog.Info("Minio instance removed", "instance", instance)
-	case events.ActionStart:
-		registry.AddInstance(instance)
-		slog.Info("New Minio instance started", "instance", instance)
-	case events.ActionStop:
-		registry.RemoveInstance(instance.ID)
-		slog.Info("Minio instance stopped", "instance", instance)
-	case events.ActionPause:
-		registry.RemoveInstance(instance.ID)
-		slog.Info("Minio instance paused", "instance", instance)
-	case events.ActionUnPause:
-		registry.AddInstance(instance)
-		slog.Info("Minio instance unpaused", "instance", instance)
+	case events.ActionDie, events.ActionStop, events.ActionPause, events.ActionDisable:
+		sr.RemoveInstance(event.Actor.ID)
+		slog.Info("Minio instance removed/stopped/paused/disable", "action", event.Action, "instance", event.Actor.ID)
+	case events.ActionStart, events.ActionUnPause, events.ActionEnable:
+		instance, err := sr.getMinioInstance(event.Actor.ID)
+		if err != nil {
+			slog.Error("Error getting Minio instance", "containerID", event.Actor.ID, "error", err)
+			return fmt.Errorf("error getting Minio instance: %v", err)
+		}
+		sr.AddInstance(event.Actor.ID, instance)
+		slog.Info("Minio instance started/unpaused/enabled", "action", event.Action, "instance", instance)
 	default:
-		slog.Info("Unhandled Minio instance event", "action", event.Action, "instance", instance)
+		slog.Info("Unhandled Minio instance event", "action", event.Action, "instance", event.Actor.ID)
 	}
 
-	slog.Info("Current Minio instances", "instances", registry.GetInstances())
+	slog.Info("Current Minio instances", "instances", sr.GetInstances())
 	return nil
 }
 
-func DiscoverMinioInstances(ctx context.Context) error {
+func (sr *ServiceRegistry) DiscoverMinioInstances(ctx context.Context, cli *client.Client) error {
 	slog.Info("Starting Minio instance discovery")
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %v", err)
-	}
-	defer cli.Close()
-
-	registry := NewServiceRegistry()
-	if err := PollNetwork(ctx, cli, registry); err != nil {
+	if err := sr.PollNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize registry: %v", err)
 	}
 
@@ -168,7 +154,7 @@ func DiscoverMinioInstances(ctx context.Context) error {
 		case err := <-errChan:
 			return fmt.Errorf("error receiving Docker event: %v", err)
 		case event := <-eventsChan:
-			if err := handleContainerEvent(ctx, cli, registry, event); err != nil {
+			if err := sr.handleContainerEvent(event); err != nil {
 				slog.Error("Error handling container event", "error", err)
 			}
 		}
