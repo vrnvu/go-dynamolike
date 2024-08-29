@@ -22,6 +22,8 @@ func init() {
 }
 
 func main() {
+	// TODO we are going to sleep for the first version so the partition are fixed
+	time.Sleep(3 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -34,17 +36,31 @@ func main() {
 	defer cli.Close()
 
 	registry := discovery.NewServiceRegistry(ctx, cli)
+	if err := registry.PollNetwork(); err != nil {
+		slog.Error("Error in Minio discovery", "error", err)
+		return
+	}
 
 	go func() {
-		if err := registry.DiscoverMinioInstances(); err != nil {
-			slog.Error("Error in Minio discovery", "error", err)
-			cancel()
+		ticker := time.NewTicker(1 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				if err := registry.PollNetwork(); err != nil {
+					slog.Error("Error in Minio discovery", "error", err)
+					cancel()
+					return
+				}
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
 		}
 	}()
 
 	// Start the server
 	port := 3000
-	server := server.NewServer(port)
+	server := server.NewServer(port, registry)
 
 	slog.Info("Server is running", "port", port)
 	go func() {

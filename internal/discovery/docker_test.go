@@ -96,9 +96,9 @@ func TestPollEmptyNetwork(t *testing.T) {
 	cli, ctx, teardown := setupTest(t)
 	defer teardown()
 
-	registry := NewServiceRegistry()
+	registry := NewServiceRegistry(ctx, cli)
 
-	err := PollNetwork(ctx, cli, registry)
+	err := registry.PollNetwork()
 	assert.NoError(t, err, "Expected no error when polling empty network")
 
 	instances := registry.GetInstances()
@@ -120,8 +120,8 @@ func TestPollNetworkWithInstances(t *testing.T) {
 	assert.NoError(t, err, "Expected no error when starting mock container")
 	slog.Info("Started container", "containerID", resp.ID, "name", CONTAINER_NAME, "network", CONTAINER_NETWORK)
 
-	registry := NewServiceRegistry()
-	err = PollNetwork(ctx, cli, registry)
+	registry := NewServiceRegistry(ctx, cli)
+	err = registry.PollNetwork()
 	assert.NoError(t, err, "Expected no error when polling network")
 	assert.NotEmpty(t, resp.ID, "Expected container ID to be set")
 
@@ -129,7 +129,8 @@ func TestPollNetworkWithInstances(t *testing.T) {
 	assert.Equal(t, 1, len(instances), "Expected 1 instance running in network, got %d", len(instances))
 	assert.Equal(t, resp.ID, instances[0].ID, "Expected container ID to be set")
 	assert.Equal(t, fmt.Sprintf("/%s-0", CONTAINER_NAME), instances[0].Name, "Expected container name to be set")
-	assert.Equal(t, "9000", instances[0].Port, "Expected container port to be set")
+	assert.Equal(t, CONTAINER_PORT, instances[0].ContainerPort, "Expected container container port to be set")
+	assert.Equal(t, "9000", instances[0].HostPort, "Expected container host port to be set")
 }
 
 func TestPollNetworkWithMultipleInstances(t *testing.T) {
@@ -156,8 +157,8 @@ func TestPollNetworkWithMultipleInstances(t *testing.T) {
 	assert.NoError(t, err, "Expected no error when starting container 2")
 	slog.Info("Started container 2", "containerID", resp2.ID, "name", fmt.Sprintf("/%s-2", CONTAINER_NAME))
 
-	registry := NewServiceRegistry()
-	err = PollNetwork(ctx, cli, registry)
+	registry := NewServiceRegistry(ctx, cli)
+	err = registry.PollNetwork()
 	assert.NoError(t, err, "Expected no error when polling network")
 
 	instances := registry.GetInstances()
@@ -166,9 +167,11 @@ func TestPollNetworkWithMultipleInstances(t *testing.T) {
 	// ... rest of the assertions
 	assert.Equal(t, resp1.ID, instances[0].ID, "Expected container 1 ID to be set")
 	assert.Equal(t, fmt.Sprintf("/%s-1", CONTAINER_NAME), instances[0].Name, "Expected container 1 name to be set")
-	assert.Equal(t, "9000", instances[0].Port, "Expected container 1 port to be set")
+	assert.Equal(t, "9000", instances[0].ContainerPort, "Expected container 1 container port to be set")
+	assert.Equal(t, "9000", instances[0].HostPort, "Expected container 1 host port to be set")
 
 	assert.Equal(t, resp2.ID, instances[1].ID, "Expected container 2 ID to be set")
 	assert.Equal(t, fmt.Sprintf("/%s-2", CONTAINER_NAME), instances[1].Name, "Expected container 2 name to be set")
-	assert.Equal(t, "9001", instances[1].Port, "Expected container 2 port to be set")
+	assert.Equal(t, "9001", instances[1].ContainerPort, "Expected container 2 container port to be set")
+	assert.Equal(t, "9001", instances[1].HostPort, "Expected container 2 host port to be set")
 }
