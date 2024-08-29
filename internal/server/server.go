@@ -29,39 +29,46 @@ func (s *Server) handleGetObject(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
 	w.Header().Set("X-Request-ID", requestID)
 
-	object_id := r.PathValue("id")
-	object, err := s.gateway.Get(r.Context(), object_id)
+	objectID := r.PathValue("id")
+	object, err := s.gateway.Get(r.Context(), objectID)
 	if err != nil {
 		slog.Error("Failed to get object",
 			slog.String("request_id", requestID),
-			slog.String("object_id", object_id),
+			slog.String("object_id", objectID),
 			slog.String("error", err.Error()),
 		)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	io.Copy(w, object)
-	object.Close()
+	defer object.Close()
+	if _, err := io.Copy(w, object); err != nil {
+		slog.Error("Failed to write object to response",
+			slog.String("request_id", requestID),
+			slog.String("object_id", objectID),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 func (s *Server) handlePutObject(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
 	w.Header().Set("X-Request-ID", requestID)
 
-	object_id := r.PathValue("id")
-	uploadInfo, err := s.gateway.Put(r.Context(), object_id, r.Body)
+	objectID := r.PathValue("id")
+	uploadInfo, err := s.gateway.Put(r.Context(), objectID, r.Body)
 	if err != nil {
 		slog.Error("Failed to put object",
 			slog.String("request_id", requestID),
-			slog.String("object_id", object_id),
+			slog.String("object_id", objectID),
+			slog.String("error", err.Error()),
 		)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("Key: %s, Bucket: %s, Location: %s", uploadInfo.Key, uploadInfo.Bucket, uploadInfo.Location)))
+	fmt.Fprintf(w, "Key: %s, Bucket: %s, Location: %s", uploadInfo.Key, uploadInfo.Bucket, uploadInfo.Location)
 }
 
 func (s *Server) newHandler() http.Handler {
