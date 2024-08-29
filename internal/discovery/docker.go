@@ -14,7 +14,6 @@ import (
 
 const CONTAINER_NAME = "minio"
 const CONTAINER_IMAGE = "minio/minio"
-const CONTAINER_NETWORK = "dynamolike-network"
 const CONTAINER_PORT = "9000"
 
 type MinioInstance struct {
@@ -29,14 +28,16 @@ type MinioInstance struct {
 
 type Registry struct {
 	ctx       context.Context
+	network   string
 	reader    *sync.RWMutex
 	cli       *client.Client
 	instances map[string]MinioInstance
 }
 
-func NewServiceRegistry(ctx context.Context, cli *client.Client) *Registry {
+func NewServiceRegistry(ctx context.Context, cli *client.Client, network string) *Registry {
 	return &Registry{
 		ctx:       ctx,
+		network:   network,
 		reader:    &sync.RWMutex{},
 		cli:       cli,
 		instances: make(map[string]MinioInstance),
@@ -82,7 +83,7 @@ func (r *Registry) PollNetwork() error {
 			filters.Arg("name", CONTAINER_NAME),
 			filters.Arg("ancestor", CONTAINER_IMAGE),
 			filters.Arg("status", "running"),
-			filters.Arg("network", CONTAINER_NETWORK),
+			filters.Arg("network", r.network),
 		),
 	})
 	if err != nil {
@@ -134,7 +135,7 @@ func (r *Registry) getMinioInstance(containerID string) (MinioInstance, error) {
 	return MinioInstance{
 		ID:            container.ID,
 		Name:          container.Name,
-		IP:            container.NetworkSettings.Networks[CONTAINER_NETWORK].IPAddress,
+		IP:            container.NetworkSettings.Networks[r.network].IPAddress,
 		ContainerPort: CONTAINER_PORT,
 		HostPort:      port,
 		User:          user,

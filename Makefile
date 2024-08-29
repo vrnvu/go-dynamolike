@@ -1,4 +1,4 @@
 .PHONY: restart
 
 restart:
-	docker-compose down && docker-compose up --build
+	docker-compose down -v --remove-orphans && docker-compose up --build

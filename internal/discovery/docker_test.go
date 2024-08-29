@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const TEST_NETWORK = "dynamolike-network"
+
 func setupTest(t *testing.T) (*client.Client, context.Context, func()) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -85,7 +87,7 @@ func createMinioContainer(ctx context.Context, cli *client.Client, containerName
 
 	networkingConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			CONTAINER_NETWORK: {},
+			TEST_NETWORK: {},
 		},
 	}
 
@@ -96,7 +98,7 @@ func TestPollEmptyNetwork(t *testing.T) {
 	cli, ctx, teardown := setupTest(t)
 	defer teardown()
 
-	registry := NewServiceRegistry(ctx, cli)
+	registry := NewServiceRegistry(ctx, cli, TEST_NETWORK)
 
 	err := registry.PollNetwork()
 	assert.NoError(t, err, "Expected no error when polling empty network")
@@ -118,9 +120,9 @@ func TestPollNetworkWithInstances(t *testing.T) {
 
 	err = cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
 	assert.NoError(t, err, "Expected no error when starting mock container")
-	slog.Info("Started container", "containerID", resp.ID, "name", CONTAINER_NAME, "network", CONTAINER_NETWORK)
+	slog.Info("Started container", "containerID", resp.ID, "name", CONTAINER_NAME, "network", TEST_NETWORK)
 
-	registry := NewServiceRegistry(ctx, cli)
+	registry := NewServiceRegistry(ctx, cli, TEST_NETWORK)
 	err = registry.PollNetwork()
 	assert.NoError(t, err, "Expected no error when polling network")
 	assert.NotEmpty(t, resp.ID, "Expected container ID to be set")
@@ -157,7 +159,7 @@ func TestPollNetworkWithMultipleInstances(t *testing.T) {
 	assert.NoError(t, err, "Expected no error when starting container 2")
 	slog.Info("Started container 2", "containerID", resp2.ID, "name", fmt.Sprintf("/%s-2", CONTAINER_NAME))
 
-	registry := NewServiceRegistry(ctx, cli)
+	registry := NewServiceRegistry(ctx, cli, TEST_NETWORK)
 	err = registry.PollNetwork()
 	assert.NoError(t, err, "Expected no error when polling network")
 

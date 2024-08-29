@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,6 +17,21 @@ import (
 	"github.com/vrnvu/go-dynamolike/internal/server"
 )
 
+const shortUsage = `Usage of go-dynamolike:
+
+	$ go-dynamolike --network <network-name>
+
+Flags:
+	--network <network-name>  (REQUIRED)
+		Specify the Docker network name to use for service discovery.
+		This flag determines which network the program will scan to find MinIO instances.
+
+Example:
+	$ go-dynamolike --network dynamolike-network
+
+Note: The --network flag is mandatory. The program will not run without it.
+`
+
 func init() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -22,6 +40,27 @@ func init() {
 }
 
 func main() {
+	if len(os.Args) == 1 {
+		fmt.Print(shortUsage)
+		return
+	}
+	log.SetFlags(0)
+	var (
+		networkFlag = flag.String("network", "", "Docker network name")
+	)
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(), shortUsage)
+	}
+	flag.Parse()
+	if *networkFlag == "" {
+		fmt.Println("Error: --network flag is required")
+		flag.Usage()
+		return
+	}
+	run(*networkFlag)
+}
+
+func run(network string) {
 	// TODO we are going to sleep for the first version so the partition are fixed
 	time.Sleep(3 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -35,7 +74,7 @@ func main() {
 	}
 	defer cli.Close()
 
-	registry := discovery.NewServiceRegistry(ctx, cli)
+	registry := discovery.NewServiceRegistry(ctx, cli, network)
 	if err := registry.PollNetwork(); err != nil {
 		slog.Error("Error in Minio discovery", "error", err)
 		return

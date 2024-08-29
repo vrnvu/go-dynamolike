@@ -16,4 +16,4 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 EXPOSE 3000
-CMD ["./main"]
+CMD ["./main", "--network", "dynamolike-network"]
