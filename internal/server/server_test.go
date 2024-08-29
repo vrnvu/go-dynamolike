@@ -12,8 +12,9 @@ func TestHandleGetObject(t *testing.T) {
 	req, err := http.NewRequest("GET", "/object/123", nil)
 	assert.NoError(t, err)
 
+	s := NewServer(9000)
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(handleGetObject)
+	handler := http.HandlerFunc(s.handleGetObject)
 
 	handler.ServeHTTP(rr, req)
 
@@ -27,7 +28,8 @@ func TestHandlePutObject(t *testing.T) {
 	assert.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(handlePutObject)
+	s := NewServer(9000)
+	handler := http.HandlerFunc(s.handlePutObject)
 
 	handler.ServeHTTP(rr, req)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
@@ -11,11 +12,18 @@ import (
 	"github.com/docker/docker/client"
 )
 
+const CONTAINER_NAME = "minio"
+const CONTAINER_IMAGE = "minio/minio"
+const CONTAINER_NETWORK = "dynamolike-network"
+const CONTAINER_PORT = "9000"
+
 type MinioInstance struct {
-	ID   string
-	Name string
-	IP   string
-	Port string
+	ID       string
+	Name     string
+	IP       string
+	Port     string
+	User     string
+	Password string
 }
 
 type ServiceRegistry struct {
@@ -44,14 +52,14 @@ func (sr *ServiceRegistry) GetInstances() []MinioInstance {
 	return instances
 }
 
-func pollNetwork(ctx context.Context, cli *client.Client, registry *ServiceRegistry) error {
+func PollNetwork(ctx context.Context, cli *client.Client, registry *ServiceRegistry) error {
 	slog.Info("Initializing registry")
 	containers, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(
-			filters.Arg("name", "minio"),
-			filters.Arg("ancestor", "minio/minio"),
+			filters.Arg("name", CONTAINER_NAME),
+			filters.Arg("ancestor", CONTAINER_IMAGE),
 			filters.Arg("status", "running"),
-			filters.Arg("network", "dynamolike-network"),
+			filters.Arg("network", CONTAINER_NETWORK),
 		),
 	})
 	if err != nil {
@@ -80,20 +88,24 @@ func getMinioInstance(ctx context.Context, cli *client.Client, containerID strin
 		return MinioInstance{}, fmt.Errorf("error inspecting container %s: %v", containerID, err)
 	}
 
-	// TODO
-	port := "9000"
-	for _, p := range container.NetworkSettings.Ports["9000/tcp"] {
-		if p.HostPort != "" {
-			port = p.HostPort
-			break
+	port := container.NetworkSettings.Ports[CONTAINER_PORT+"/tcp"][0].HostPort
+	user := ""
+	password := ""
+	for _, env := range container.Config.Env {
+		if strings.HasPrefix(env, "MINIO_ROOT_USER=") {
+			user = strings.TrimPrefix(env, "MINIO_ROOT_USER=")
+		} else if strings.HasPrefix(env, "MINIO_ROOT_PASSWORD=") {
+			password = strings.TrimPrefix(env, "MINIO_ROOT_PASSWORD=")
 		}
 	}
 
 	return MinioInstance{
-		ID:   container.ID[:12],
-		Name: container.Name,
-		IP:   container.NetworkSettings.IPAddress,
-		Port: port,
+		ID:       container.ID,
+		Name:     container.Name,
+		IP:       container.NetworkSettings.IPAddress,
+		Port:     port,
+		User:     user,
+		Password: password,
 	}, nil
 }
 
@@ -136,14 +148,14 @@ func DiscoverMinioInstances(ctx context.Context) error {
 	defer cli.Close()
 
 	registry := NewServiceRegistry()
-	if err := pollNetwork(ctx, cli, registry); err != nil {
+	if err := PollNetwork(ctx, cli, registry); err != nil {
 		return fmt.Errorf("failed to initialize registry: %v", err)
 	}
 
 	filters := filters.NewArgs()
 	filters.Add("type", "container")
-	filters.Add("name", "minio")
-	filters.Add("network", "dynamolike-network")
+	filters.Add("name", CONTAINER_NAME)
+	filters.Add("network", CONTAINER_NETWORK)
 
 	eventsChan, errChan := cli.Events(ctx, events.ListOptions{Filters: filters})
 

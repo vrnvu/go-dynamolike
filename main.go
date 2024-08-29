@@ -38,7 +38,7 @@ func main() {
 
 	slog.Info("Server is running", "port", port)
 	go func() {
-		err := server.ListenAndServe()
+		err := server.Server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
 			slog.Error("Server error", "error", err)
 			cancel()
@@ -58,7 +58,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	err := server.Shutdown(shutdownCtx)
+	err := server.Server.Shutdown(shutdownCtx)
 	if err != nil {
 		slog.Error("Error during shutdown", "error", err)
 	}

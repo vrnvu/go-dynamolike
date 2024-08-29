@@ -5,7 +5,13 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/vrnvu/go-dynamolike/internal/discovery"
 )
+
+type Server struct {
+	Server   *http.Server
+	registry *discovery.ServiceRegistry
+}
 
 const (
 	getObjectPath = "/object/:id"
@@ -16,26 +22,26 @@ func generateRequestID() string {
 	return uuid.New().String()
 }
 
-func handleGetObject(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetObject(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
 	w.Header().Set("X-Request-ID", requestID)
 	w.Write([]byte(fmt.Sprintf("RequestID: %s", requestID)))
 }
 
-func handlePutObject(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePutObject(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
 	w.Header().Set("X-Request-ID", requestID)
 	w.Write([]byte(fmt.Sprintf("RequestID: %s", requestID)))
 }
 
-func newHandler() http.Handler {
+func (s *Server) newHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(getObjectPath, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			handleGetObject(w, r)
+			s.handleGetObject(w, r)
 		case http.MethodPut:
-			handlePutObject(w, r)
+			s.handlePutObject(w, r)
 		default:
 			panic(fmt.Sprintf("Unsupported HTTP method: %s", r.Method))
 		}
@@ -43,12 +49,16 @@ func newHandler() http.Handler {
 	return mux
 }
 
-func NewServer(port int) *http.Server {
-	handler := newHandler()
+func NewServer(port int) *Server {
+	s := &Server{}
+
 	addrPort := fmt.Sprintf(":%d", port)
-	server := &http.Server{
+	httpServer := &http.Server{
 		Addr:    addrPort,
-		Handler: handler,
+		Handler: s.newHandler(),
 	}
-	return server
+
+	s.registry = discovery.NewServiceRegistry()
+	s.Server = httpServer
+	return s
 }
