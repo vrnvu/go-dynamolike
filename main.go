@@ -19,16 +19,19 @@ import (
 
 const shortUsage = `Usage of go-dynamolike:
 
-	$ go-dynamolike --network <network-name>
+	$ go-dynamolike --port <port> --network <network-name>
 
 Flags:
 	--network <network-name>  (REQUIRED)
 		Specify the Docker network name to use for service discovery.
 		This flag determines which network the program will scan to find MinIO instances.
+	--port <port>  (REQUIRED)
+		Specify the port to use for the HTTP server.
 
 Example:
-	$ go-dynamolike --network dynamolike-network
+	$ go-dynamolike --port 3000 --network dynamolike-network
 
+Note: The --port flag is mandatory. The program will not run without it.
 Note: The --network flag is mandatory. The program will not run without it.
 `
 
@@ -46,21 +49,27 @@ func main() {
 	}
 	log.SetFlags(0)
 	var (
+		portFlag    = flag.Int("port", 0, "HTTP server port")
 		networkFlag = flag.String("network", "", "Docker network name")
 	)
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), shortUsage)
 	}
 	flag.Parse()
+	if *portFlag == 0 || *portFlag < 1 || *portFlag > 65535 {
+		fmt.Println("Error: --port flag is required and must be a valid port number")
+		flag.Usage()
+		return
+	}
 	if *networkFlag == "" {
 		fmt.Println("Error: --network flag is required")
 		flag.Usage()
 		return
 	}
-	run(*networkFlag)
+	run(*portFlag, *networkFlag)
 }
 
-func run(network string) {
+func run(port int, network string) {
 	// TODO we are going to sleep for the first version so the partition are fixed
 	time.Sleep(3 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,7 +107,6 @@ func run(network string) {
 	}()
 
 	// Start the server
-	port := 3000
 	server := server.NewServer(port, registry)
 
 	slog.Info("Server is running", "port", port)

@@ -165,7 +165,6 @@ func TestPollNetworkWithMultipleInstances(t *testing.T) {
 	instances := registry.GetInstances()
 	assert.Equal(t, 2, len(instances), "Expected 2 instances running in network, got %d", len(instances))
 
-	// ... rest of the assertions
 	assert.Equal(t, resp1.ID, instances[0].ID, "Expected container 1 ID to be set")
 	assert.Equal(t, fmt.Sprintf("/%s-1", CONTAINER_NAME), instances[0].Name, "Expected container 1 name to be set")
 	assert.Equal(t, "9000", instances[0].ContainerPort, "Expected container 1 container port to be set")
