@@ -110,25 +110,27 @@ func getMinioInstance(ctx context.Context, cli *client.Client, containerID strin
 }
 
 func handleContainerEvent(ctx context.Context, cli *client.Client, registry *ServiceRegistry, event events.Message) error {
+	// TODO we probably want to change the mapping from ContainerID to MinioInstanceID
+	// since the container can be restarted with the same ID
 	instance, err := getMinioInstance(ctx, cli, event.Actor.ID)
 	if err != nil {
 		return fmt.Errorf("error getting Minio instance for container %s: %v", event.Actor.ID, err)
 	}
 
 	switch event.Action {
-	case "die":
+	case events.ActionDie:
 		registry.RemoveInstance(instance.ID)
 		slog.Info("Minio instance removed", "instance", instance)
-	case "start":
+	case events.ActionStart:
 		registry.AddInstance(instance)
 		slog.Info("New Minio instance started", "instance", instance)
-	case "stop":
+	case events.ActionStop:
 		registry.RemoveInstance(instance.ID)
 		slog.Info("Minio instance stopped", "instance", instance)
-	case "pause":
+	case events.ActionPause:
 		registry.RemoveInstance(instance.ID)
 		slog.Info("Minio instance paused", "instance", instance)
-	case "unpause":
+	case events.ActionUnPause:
 		registry.AddInstance(instance)
 		slog.Info("Minio instance unpaused", "instance", instance)
 	default:
