@@ -110,7 +110,6 @@ func TestPollEmptyNetwork(t *testing.T) {
 func TestPollNetworkWithInstances(t *testing.T) {
 	cli, ctx, teardown := setupTest(t)
 	defer teardown()
-	// no cache
 
 	pullDockerImage(ctx, cli)
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -97,7 +98,7 @@ func (r *Registry) PollNetwork() error {
 			continue
 		}
 
-		instance, err := r.getMinioInstance(container.ID)
+		instance, err := r.getMinioInstance(container)
 		if err != nil {
 			slog.Error("Error getting Minio instance", "containerID", container.ID, "error", err)
 			continue
@@ -115,16 +116,21 @@ func (r *Registry) isInstanceRegistered(containerID string) bool {
 	return ok
 }
 
-func (r *Registry) getMinioInstance(containerID string) (MinioInstance, error) {
-	container, err := r.cli.ContainerInspect(r.ctx, containerID)
+func (r *Registry) getMinioInstance(container types.Container) (MinioInstance, error) {
+	if len(container.Ports) == 0 {
+		return MinioInstance{}, fmt.Errorf("no ports found for container %s", container.ID)
+	}
+	hostPort := fmt.Sprintf("%d", container.Ports[0].PublicPort)
+
+	containerJSON, err := r.cli.ContainerInspect(r.ctx, container.ID)
 	if err != nil {
-		return MinioInstance{}, fmt.Errorf("error inspecting container %s: %v", containerID, err)
+		slog.Error("Error inspecting container", "containerID", container.ID, "error", err)
+		return MinioInstance{}, fmt.Errorf("error inspecting container %s: %v", container.ID, err)
 	}
 
-	port := container.NetworkSettings.Ports[CONTAINER_PORT+"/tcp"][0].HostPort
 	user := ""
 	password := ""
-	for _, env := range container.Config.Env {
+	for _, env := range containerJSON.Config.Env {
 		if strings.HasPrefix(env, "MINIO_ROOT_USER=") {
 			user = strings.TrimPrefix(env, "MINIO_ROOT_USER=")
 		} else if strings.HasPrefix(env, "MINIO_ROOT_PASSWORD=") {
@@ -134,10 +140,10 @@ func (r *Registry) getMinioInstance(containerID string) (MinioInstance, error) {
 
 	return MinioInstance{
 		ID:            container.ID,
-		Name:          container.Name,
+		Name:          container.Names[0],
 		IP:            container.NetworkSettings.Networks[r.network].IPAddress,
 		ContainerPort: CONTAINER_PORT,
-		HostPort:      port,
+		HostPort:      hostPort,
 		User:          user,
 		Password:      password,
 	}, nil

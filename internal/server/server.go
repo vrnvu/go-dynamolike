@@ -87,18 +87,19 @@ func (s *Server) newHandler() http.Handler {
 }
 
 func NewServer(port int, registry *discovery.Registry) *Server {
-	fixedSizePartitioner := partition.New(2) // TODO
-	gateway := client.NewMinioGatewayWithFixedPartitioner(registry, fixedSizePartitioner)
+	const defaultPartitionSize = 2 // TODO: Make this configurable
+
 	s := &Server{
-		gateway: gateway,
+		gateway: client.NewMinioGatewayWithFixedPartitioner(
+			registry,
+			partition.New(defaultPartitionSize),
+		),
+		Server: &http.Server{
+			Addr:    fmt.Sprintf(":%d", port),
+			Handler: nil, // Will be set in the next line
+		},
 	}
+	s.Server.Handler = s.newHandler()
 
-	addrPort := fmt.Sprintf(":%d", port)
-	httpServer := &http.Server{
-		Addr:    addrPort,
-		Handler: s.newHandler(),
-	}
-
-	s.Server = httpServer
 	return s
 }

@@ -104,26 +104,30 @@ func New(ctx context.Context, config MinioNodeConfig) (*MinioNode, error) {
 	return &MinioNode{config.NodeID, minioClient}, nil
 }
 
-func createBucket(ctx context.Context, minioClient *minio.Client, nodeID string) {
+func createBucket(ctx context.Context, minioClient *minio.Client, nodeID string) error {
 	exists, errBucketExists := minioClient.BucketExists(ctx, bucketName)
 	if errBucketExists == nil && exists {
 		slog.Info("We already own bucket",
 			slog.String("bucket", bucketName),
 		)
-	} else {
-		err := minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: bucketLocation})
-		if err != nil {
-			slog.Error("Failed to create bucket",
-				slog.String("bucket", bucketName),
-				slog.String("nodeId", nodeID),
-				slog.String("error", err.Error()),
-			)
-		}
-		slog.Info("Successfully created bucket",
+		return nil
+	}
+
+	err := minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: bucketLocation})
+	if err != nil {
+		slog.Error("Failed to create bucket",
 			slog.String("bucket", bucketName),
 			slog.String("nodeId", nodeID),
+			slog.String("error", err.Error()),
 		)
+		return fmt.Errorf("failed to create bucket %s on node %s: %w", bucketName, nodeID, err)
 	}
+
+	slog.Info("Successfully created bucket",
+		slog.String("bucket", bucketName),
+		slog.String("nodeId", nodeID),
+	)
+	return nil
 }
 
 func (m *MinioNode) Get(ctx context.Context, objectName string) (io.ReadCloser, error) {
