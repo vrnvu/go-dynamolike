@@ -57,12 +57,12 @@ func main() {
 	}
 	flag.Parse()
 	if *portFlag == 0 || *portFlag < 1 || *portFlag > 65535 {
-		fmt.Println("Error: --port flag is required and must be a valid port number")
+		slog.Error("Invalid port number", slog.Int("port", *portFlag))
 		flag.Usage()
 		return
 	}
 	if *networkFlag == "" {
-		fmt.Println("Error: --network flag is required")
+		slog.Error("Network flag is required")
 		flag.Usage()
 		return
 	}
@@ -77,7 +77,7 @@ func run(port int, network string) {
 
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		slog.Error("Error creating Docker client", "error", err)
+		slog.Error("Failed to create Docker client", slog.String("error", err.Error()))
 		cancel()
 		return
 	}
@@ -85,7 +85,7 @@ func run(port int, network string) {
 
 	registry := discovery.NewServiceRegistry(ctx, cli, network)
 	if err := registry.PollNetwork(); err != nil {
-		slog.Error("Error in Minio discovery", "error", err)
+		slog.Error("Failed in Minio discovery", slog.String("error", err.Error()))
 		return
 	}
 
@@ -95,7 +95,7 @@ func run(port int, network string) {
 			select {
 			case <-ticker.C:
 				if err := registry.PollNetwork(); err != nil {
-					slog.Error("Error in Minio discovery", "error", err)
+					slog.Error("Failed in Minio discovery", slog.String("error", err.Error()))
 					cancel()
 					return
 				}
@@ -109,11 +109,11 @@ func run(port int, network string) {
 	// Start the server
 	server := server.NewServer(port, registry)
 
-	slog.Info("Server is running", "port", port)
+	slog.Info("Server is running", slog.Int("port", port))
 	go func() {
 		err := server.Server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			slog.Error("Server error", "error", err)
+			slog.Error("Server error", slog.String("error", err.Error()))
 			cancel()
 		}
 	}()
@@ -123,9 +123,9 @@ func run(port int, network string) {
 
 	select {
 	case <-quit:
-		slog.Info("Shutting down...")
+		slog.Info("Received shutdown signal")
 	case <-ctx.Done():
-		slog.Info("Shutting down due to error...")
+		slog.Info("Shutting down due to error")
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -133,6 +133,8 @@ func run(port int, network string) {
 
 	err = server.Server.Shutdown(shutdownCtx)
 	if err != nil {
-		slog.Error("Error during shutdown", "error", err)
+		slog.Error("Error during shutdown", slog.String("error", err.Error()))
+	} else {
+		slog.Info("Server shutdown completed successfully")
 	}
 }

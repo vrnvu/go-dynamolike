@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/vrnvu/go-dynamolike/internal/client"
@@ -86,17 +87,23 @@ func (s *Server) newHandler() http.Handler {
 	return mux
 }
 
-func NewServer(port int, registry *discovery.Registry) *Server {
+func NewServer(port int, registry *discovery.DockerRegistry) *Server {
 	const defaultPartitionSize = 2 // TODO: Make this configurable
 
+	gateway, err := client.NewMinioGatewayFixed().
+		WithRegistry(registry).
+		WithPartitioner(partition.New(defaultPartitionSize)).
+		InitializeBuckets()
+	if err != nil {
+		slog.Error("Failed to create Minio gateway", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	s := &Server{
-		gateway: client.NewMinioGatewayWithFixedPartitioner(
-			registry,
-			partition.New(defaultPartitionSize),
-		),
+		gateway: gateway,
 		Server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
-			Handler: nil, // Will be set in the next line
+			Handler: nil,
 		},
 	}
 	s.Server.Handler = s.newHandler()

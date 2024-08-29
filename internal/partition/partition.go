@@ -7,6 +7,10 @@ import (
 	"github.com/lithammer/go-jump-consistent-hash"
 )
 
+type Partitioner interface {
+	Hash(key string) int
+}
+
 type Partition struct {
 	nodes        int
 	virtualNodes int

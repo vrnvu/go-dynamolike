@@ -17,6 +17,14 @@ const CONTAINER_NAME = "minio"
 const CONTAINER_IMAGE = "minio/minio"
 const CONTAINER_PORT = "9000"
 
+type Registry interface {
+	GetInstances() []MinioInstance
+	GetInstance(key string) (MinioInstance, error)
+	AddInstance(containerID string, instance MinioInstance)
+	RemoveInstance(containerID string)
+	PollNetwork() error
+}
+
 type MinioInstance struct {
 	ID            string
 	Name          string
@@ -27,7 +35,7 @@ type MinioInstance struct {
 	Password      string
 }
 
-type Registry struct {
+type DockerRegistry struct {
 	ctx       context.Context
 	network   string
 	reader    *sync.RWMutex
@@ -35,8 +43,8 @@ type Registry struct {
 	instances map[string]MinioInstance
 }
 
-func NewServiceRegistry(ctx context.Context, cli *client.Client, network string) *Registry {
-	return &Registry{
+func NewServiceRegistry(ctx context.Context, cli *client.Client, network string) *DockerRegistry {
+	return &DockerRegistry{
 		ctx:       ctx,
 		network:   network,
 		reader:    &sync.RWMutex{},
@@ -45,19 +53,19 @@ func NewServiceRegistry(ctx context.Context, cli *client.Client, network string)
 	}
 }
 
-func (r *Registry) AddInstance(containerID string, instance MinioInstance) {
+func (r *DockerRegistry) AddInstance(containerID string, instance MinioInstance) {
 	r.reader.Lock()
 	defer r.reader.Unlock()
 	r.instances[containerID] = instance
 }
 
-func (r *Registry) RemoveInstance(containerID string) {
+func (r *DockerRegistry) RemoveInstance(containerID string) {
 	r.reader.Lock()
 	defer r.reader.Unlock()
 	delete(r.instances, containerID)
 }
 
-func (r *Registry) GetInstances() []MinioInstance {
+func (r *DockerRegistry) GetInstances() []MinioInstance {
 	r.reader.RLock()
 	defer r.reader.RUnlock()
 	instances := make([]MinioInstance, 0, len(r.instances))
@@ -67,7 +75,7 @@ func (r *Registry) GetInstances() []MinioInstance {
 	return instances
 }
 
-func (r *Registry) GetInstance(key string) (MinioInstance, error) {
+func (r *DockerRegistry) GetInstance(key string) (MinioInstance, error) {
 	r.reader.RLock()
 	defer r.reader.RUnlock()
 	instance, ok := r.instances[key]
@@ -77,7 +85,7 @@ func (r *Registry) GetInstance(key string) (MinioInstance, error) {
 	return instance, nil
 }
 
-func (r *Registry) PollNetwork() error {
+func (r *DockerRegistry) PollNetwork() error {
 	slog.Info("Polling network for Minio instances")
 	containers, err := r.cli.ContainerList(r.ctx, container.ListOptions{
 		Filters: filters.NewArgs(
@@ -111,12 +119,12 @@ func (r *Registry) PollNetwork() error {
 }
 
 // TODO assume static instances
-func (r *Registry) isInstanceRegistered(containerID string) bool {
+func (r *DockerRegistry) isInstanceRegistered(containerID string) bool {
 	_, ok := r.instances[containerID]
 	return ok
 }
 
-func (r *Registry) getMinioInstance(container types.Container) (MinioInstance, error) {
+func (r *DockerRegistry) getMinioInstance(container types.Container) (MinioInstance, error) {
 	if len(container.Ports) == 0 {
 		return MinioInstance{}, fmt.Errorf("no ports found for container %s", container.ID)
 	}
