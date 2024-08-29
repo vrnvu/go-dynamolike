@@ -36,7 +36,7 @@ func main() {
 	registry := discovery.NewServiceRegistry(ctx, cli)
 
 	go func() {
-		if err := registry.DiscoverMinioInstances(ctx, cli); err != nil {
+		if err := registry.DiscoverMinioInstances(); err != nil {
 			slog.Error("Error in Minio discovery", "error", err)
 			cancel()
 		}

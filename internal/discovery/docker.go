@@ -134,7 +134,7 @@ func (sr *ServiceRegistry) handleContainerEvent(event events.Message) error {
 	return nil
 }
 
-func (sr *ServiceRegistry) DiscoverMinioInstances(ctx context.Context, cli *client.Client) error {
+func (sr *ServiceRegistry) DiscoverMinioInstances() error {
 	slog.Info("Starting Minio instance discovery")
 	if err := sr.PollNetwork(); err != nil {
 		return fmt.Errorf("failed to initialize registry: %v", err)
@@ -145,11 +145,11 @@ func (sr *ServiceRegistry) DiscoverMinioInstances(ctx context.Context, cli *clie
 	filters.Add("name", CONTAINER_NAME)
 	filters.Add("network", CONTAINER_NETWORK)
 
-	eventsChan, errChan := cli.Events(ctx, events.ListOptions{Filters: filters})
+	eventsChan, errChan := sr.cli.Events(sr.ctx, events.ListOptions{Filters: filters})
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-sr.ctx.Done():
 			return nil
 		case err := <-errChan:
 			return fmt.Errorf("error receiving Docker event: %v", err)
